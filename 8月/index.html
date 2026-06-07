@@ -51,6 +51,7 @@ h2{font-size:18px;font-weight:600;margin-bottom:4px}
       チェックあり＝出勤可能<br>
       チェックなし＝出勤不可<br><br>
       入力が完了したら一番下の「送信する」ボタンを押してください。<br><br>
+      ※入力内容は自動的に保存されます。途中で閉じても次回開いた時に前回の内容から再開できます。<br><br>
       <span style="color:#c0392b;">※可能な範囲で出勤可能な日時をご提示ください。なお、ご提出いただいたすべての枠に授業が入るとは限りません。（すべての枠でお願いする場合もございます）<br>
       ※通常授業のある日時については、そのままチェックを入れておいてください。</span>
     </div>
@@ -61,7 +62,7 @@ h2{font-size:18px;font-weight:600;margin-bottom:4px}
     <div class="month-label">8月</div>
     <div id="schedule"></div>
     <div class="submit-area">
-      <p class="submit-note">※送信後の変更はできません。変更が必要な場合は塾までご連絡ください。</p>
+      <p class="submit-note">※送信後にスケジュールに変更が生じる場合はJANDIでお知らせください。</p>
       <button class="btn-submit" onclick="handleSubmit()">送信する</button>
     </div>
   </div>
@@ -74,7 +75,7 @@ h2{font-size:18px;font-weight:600;margin-bottom:4px}
 <script>
 const SCRIPT_URL="ここにGoogle Apps ScriptのURLを入力";
 const TEACHER_NAME="講師名";
-
+const SAVE_KEY='schedule_8月_'+TEACHER_NAME;
 const times=[
   {label:"1限",time:"13:00-14:20"},
   {label:"2限",time:"14:30-15:50"},
@@ -85,7 +86,6 @@ const times=[
 ];
 const weeks=["日","月","火","水","木","金","土"];
 const holidays=[];
-
 function getDates(){
   const dates=[];
   let d=new Date(2026,7,1);
@@ -96,7 +96,6 @@ function getDates(){
 function fmt(d){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-
 const dates=getDates();
 const state={};
 dates.forEach(d=>{
@@ -104,7 +103,21 @@ dates.forEach(d=>{
   state[key]={};
   times.forEach((_,i)=>{state[key][i]=true;});
 });
-
+function saveState(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(state));}catch(e){}}
+function loadState(){
+  try{
+    const saved=localStorage.getItem(SAVE_KEY);
+    if(saved){
+      const parsed=JSON.parse(saved);
+      dates.forEach(d=>{
+        const key=fmt(d);
+        if(parsed[key]){times.forEach((_,i)=>{state[key][i]=parsed[key][i];});}
+      });
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
 function buildUI(){
   const container=document.getElementById('schedule');
   dates.forEach(d=>{
@@ -122,24 +135,25 @@ function buildUI(){
     slots.className='slots';
     times.forEach((t,i)=>{
       const slot=document.createElement('label');
-      slot.className='slot checked';
+      slot.className='slot'+(state[key][i]?' checked':'');
       slot.id=`slot-${key}-${i}`;
-      slot.innerHTML=`<input type="checkbox" checked onchange="toggleSlot('${key}',${i},this.checked)"><span><span class="slot-text">${t.label}</span><span class="slot-time">${t.time}</span></span>`;
+      slot.innerHTML=`<input type="checkbox" ${state[key][i]?'checked':''} onchange="toggleSlot('${key}',${i},this.checked)"><span><span class="slot-text">${t.label}</span><span class="slot-time">${t.time}</span></span>`;
       slots.appendChild(slot);
     });
+    const cnt=Object.values(state[key]).filter(Boolean).length;
+    header.querySelector('.day-count').textContent=`${cnt}/6`;
     block.appendChild(header);
     block.appendChild(slots);
     container.appendChild(block);
   });
 }
-
 function toggleSlot(key,idx,checked){
   state[key][idx]=checked;
   document.getElementById(`slot-${key}-${idx}`).classList.toggle('checked',checked);
   const cnt=Object.values(state[key]).filter(Boolean).length;
   document.getElementById('cnt-'+key).textContent=`${cnt}/6`;
+  saveState();
 }
-
 function setAll(val){
   dates.forEach(d=>{
     const key=fmt(d);
@@ -151,25 +165,22 @@ function setAll(val){
     const cnt=Object.values(state[key]).filter(Boolean).length;
     document.getElementById('cnt-'+key).textContent=`${cnt}/6`;
   });
+  saveState();
 }
-
 function handleSubmit(){
   const available=[];
   dates.forEach(d=>{
     const key=fmt(d);
     const dow=d.getDay();
     times.forEach((t,i)=>{
-      if(state[key][i]){
-        available.push(`${d.getMonth()+1}/${d.getDate()}（${weeks[dow]}）${t.label}`);
-      }
+      if(state[key][i]){available.push(`${d.getMonth()+1}/${d.getDate()}（${weeks[dow]}）${t.label}`);}
     });
   });
   document.getElementById('form-area').style.display='none';
   document.getElementById('sending').style.display='block';
+  try{localStorage.removeItem(SAVE_KEY);}catch(e){}
   fetch(SCRIPT_URL,{
-    method:'POST',
-    mode:'no-cors',
-    headers:{'Content-Type':'application/json'},
+    method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({name:TEACHER_NAME,month:'8月',available:available,timestamp:new Date().toLocaleString('ja-JP')})
   }).then(()=>{
     document.getElementById('sending').style.display='none';
@@ -179,8 +190,7 @@ function handleSubmit(){
     document.getElementById('done').style.display='block';
   });
 }
-
-buildUI();
+loadState();buildUI();
 </script>
 </body>
 </html>
